@@ -10,11 +10,11 @@ The complete technical architecture is documented in [`DESIGN.md`](./DESIGN.md).
 
 ## Current Status
 
-**Stage:** Initial design / repository foundation
+**Stage:** Backend foundation
 
-The project is being developed incrementally using a milestone-based approach.
+The project is being developed incrementally using a milestone-based approach. M0 (documentation), M1 (Node.js + TypeScript + Express backend), and M2 (PostgreSQL persistence foundation) are implemented.
 
-The repository should not be considered a functional assistant until the corresponding milestones are implemented.
+The backend currently provides a health endpoint and a PostgreSQL/Drizzle persistence foundation. Buddy is not yet a functional assistant; features from later milestones are still to be built.
 
 ---
 
@@ -253,6 +253,105 @@ Buddy will be developed one milestone at a time.
 | M24 | V1 freeze |
 
 See [`DESIGN.md`](./DESIGN.md) for the detailed scope and acceptance criteria of each milestone.
+
+---
+
+## Backend Development
+
+The backend lives in `backend/` and uses Node.js, TypeScript, Express, and Drizzle ORM.
+
+### Prerequisites
+
+- Node.js (LTS) and npm
+- Docker with the Compose plugin (for local PostgreSQL)
+
+### Install dependencies
+
+```bash
+cd backend
+npm install
+```
+
+### Run the backend
+
+```bash
+cd backend
+npm run dev
+```
+
+The health endpoint is available at `GET http://localhost:3000/api/health`.
+
+---
+
+## Local PostgreSQL
+
+Local PostgreSQL runs in a dedicated Docker container. Redis/BullMQ and other infrastructure are intentionally not part of this setup yet.
+
+### Start PostgreSQL
+
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+
+The container uses the database `buddy` and the user `buddy`, and exposes port `5432`.
+
+### Configure DATABASE_URL
+
+Copy `.env.example` to `.env` and set `DATABASE_URL`:
+
+```env
+DATABASE_URL=postgresql://buddy:change_me@localhost:5432/buddy
+```
+
+Change `change_me` to the password used for your local container (`POSTGRES_PASSWORD`). Never commit the resulting `.env`.
+
+### Run migrations
+
+```bash
+cd backend
+npm run db:generate
+npm run db:migrate
+```
+
+`npm run db:check` validates the migration state. There are no business tables yet, so the initial migration set is empty by design.
+
+### Run tests
+
+```bash
+cd backend
+npm test
+```
+
+Unit tests run without PostgreSQL. Database integration tests run only when `DATABASE_URL` is set:
+
+```bash
+cd backend
+DATABASE_URL=postgresql://buddy:change_me@localhost:5432/buddy npm run test:integration
+```
+
+### Stop PostgreSQL
+
+```bash
+docker compose -f docker/docker-compose.yml down
+```
+
+PostgreSQL data is stored in the `buddy-postgres-data` Docker volume and persists across restarts.
+
+### Where the database code lives
+
+```text
+backend/src/db/
+├── client.ts        # Drizzle + pg connection pool (reusable singleton)
+├── health.ts        # connectivity check
+└── schema/
+    └── index.ts     # schema definitions (empty until later milestones)
+
+backend/drizzle.config.ts   # Drizzle Kit configuration
+backend/drizzle/            # generated SQL migrations
+docker/docker-compose.yml   # local PostgreSQL service
+```
+
+Database access is kept inside this infrastructure layer; routes, controllers, and middleware must not connect to PostgreSQL directly.
 
 ---
 

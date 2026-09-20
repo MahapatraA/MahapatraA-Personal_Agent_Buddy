@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: buddy-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: buddy
+      POSTGRES_USER: buddy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - buddy-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buddy -d buddy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  buddy-postgres-data:
