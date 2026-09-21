@@ -7,9 +7,11 @@ export interface Env {
   port: number;
   isProduction: boolean;
   databaseUrl: string | undefined;
+  jwtSecret: string | undefined;
 }
 
 const DEFAULT_PORT = 3000;
+const MIN_PRODUCTION_JWT_SECRET_LENGTH = 32;
 
 export function parsePort(value: string | undefined): number {
   if (value === undefined || value.trim() === '') {
@@ -45,14 +47,35 @@ export function parseDatabaseUrl(value: string | undefined): string | undefined 
   return value;
 }
 
+export function parseJwtSecret(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') {
+    return undefined;
+  }
+
+  return value;
+}
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const nodeEnv = source.NODE_ENV ?? 'development';
+  const isProduction = nodeEnv === 'production';
+  const jwtSecret = parseJwtSecret(source.JWT_SECRET);
+
+  if (isProduction && jwtSecret === undefined) {
+    throw new Error('JWT_SECRET must be explicitly configured in production.');
+  }
+
+  if (isProduction && jwtSecret !== undefined && jwtSecret.length < MIN_PRODUCTION_JWT_SECRET_LENGTH) {
+    throw new Error(
+      `JWT_SECRET must be at least ${MIN_PRODUCTION_JWT_SECRET_LENGTH} characters long in production.`
+    );
+  }
 
   return {
     nodeEnv,
     port: parsePort(source.PORT),
-    isProduction: nodeEnv === 'production',
-    databaseUrl: parseDatabaseUrl(source.DATABASE_URL)
+    isProduction,
+    databaseUrl: parseDatabaseUrl(source.DATABASE_URL),
+    jwtSecret
   };
 }
 

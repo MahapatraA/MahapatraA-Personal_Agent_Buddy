@@ -10,11 +10,11 @@ The complete technical architecture is documented in [`DESIGN.md`](./DESIGN.md).
 
 ## Current Status
 
-**Stage:** Backend foundation
+**Stage:** Authentication
 
-The project is being developed incrementally using a milestone-based approach. M0 (documentation), M1 (Node.js + TypeScript + Express backend), and M2 (PostgreSQL persistence foundation) are implemented.
+The project is being developed incrementally using a milestone-based approach. M0 (documentation), M1 (Node.js + TypeScript + Express backend), M2 (PostgreSQL persistence foundation), and M3 (authentication) are implemented.
 
-The backend currently provides a health endpoint and a PostgreSQL/Drizzle persistence foundation. Buddy is not yet a functional assistant; features from later milestones are still to be built.
+The backend currently provides a health endpoint, a PostgreSQL/Drizzle persistence foundation, and email/password authentication with JWT access tokens and opaque refresh tokens. Buddy is not yet a functional assistant; features from later milestones are still to be built.
 
 ---
 
@@ -313,21 +313,7 @@ npm run db:generate
 npm run db:migrate
 ```
 
-`npm run db:check` validates the migration state. There are no business tables yet, so the initial migration set is empty by design.
-
-### Run tests
-
-```bash
-cd backend
-npm test
-```
-
-Unit tests run without PostgreSQL. Database integration tests run only when `DATABASE_URL` is set:
-
-```bash
-cd backend
-DATABASE_URL=postgresql://buddy:change_me@localhost:5432/buddy npm run test:integration
-```
+`npm run db:check` validates the migration state. The M3 migration creates the `users` and `refresh_tokens` tables.
 
 ### Stop PostgreSQL
 
@@ -344,7 +330,9 @@ backend/src/db/
 ├── client.ts        # Drizzle + pg connection pool (reusable singleton)
 ├── health.ts        # connectivity check
 └── schema/
-    └── index.ts     # schema definitions (empty until later milestones)
+    ├── index.ts     # schema barrel
+    ├── users.ts     # users table
+    └── refresh-tokens.ts  # refresh_tokens table
 
 backend/drizzle.config.ts   # Drizzle Kit configuration
 backend/drizzle/            # generated SQL migrations
@@ -352,6 +340,71 @@ docker/docker-compose.yml   # local PostgreSQL service
 ```
 
 Database access is kept inside this infrastructure layer; routes, controllers, and middleware must not connect to PostgreSQL directly.
+
+---
+
+## Authentication
+
+M3 adds email/password authentication with short-lived JWT access tokens and opaque, rotating refresh tokens.
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Create an account and return a session |
+| POST | `/api/auth/login` | Exchange email + password for tokens |
+| POST | `/api/auth/refresh` | Rotate a refresh token and issue new tokens |
+| POST | `/api/auth/logout` | Revoke a refresh token |
+| GET | `/api/auth/me` | Return the current user (requires an access token) |
+
+Protected endpoints expect an `Authorization: Bearer <accessToken>` header.
+
+### Access token vs refresh token
+
+| | Access token | Refresh token |
+|---|---|---|
+| Format | Signed JWT (HS256) | Opaque random string |
+| Lifetime | ~15 minutes | ~30 days |
+| Storage | Held by the client only | Only a SHA-256 hash is stored in PostgreSQL |
+| Purpose | Authorize API requests | Obtain new access tokens |
+
+Refresh tokens are rotated on every use: the presented token is revoked and a new one is issued. Reusing a revoked or expired refresh token is rejected.
+
+### Configure JWT_SECRET
+
+`JWT_SECRET` is read from the environment and is never hard-coded. Copy `.env.example` to `.env` and set a strong local value:
+
+```env
+JWT_SECRET=replace-with-a-long-random-local-secret
+```
+
+In production the application refuses to start unless `JWT_SECRET` is explicitly configured and at least 32 characters long.
+
+### Security properties
+
+- Passwords are hashed with Argon2id; plaintext passwords are never stored or returned.
+- Password hashes are never included in API responses.
+- Refresh tokens are cryptographically random and only their hashes are persisted.
+- Access tokens and refresh tokens are never logged.
+- Login errors do not reveal whether an account exists.
+
+---
+
+## Testing
+
+```bash
+cd backend
+npm test
+npm run typecheck
+npm run build
+```
+
+Unit tests run without PostgreSQL. Database integration tests run only when `DATABASE_URL` is set:
+
+```bash
+cd backend
+DATABASE_URL=postgresql://buddy:change_me@localhost:5432/buddy npm run test:integration
+```
 
 ---
 

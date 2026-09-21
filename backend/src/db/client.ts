@@ -4,6 +4,8 @@ import { env } from '../config/env';
 import * as schema from './schema';
 
 export type Database = NodePgDatabase<typeof schema>;
+export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type DatabaseExecutor = Database | Transaction;
 
 let pool: Pool | undefined;
 let database: Database | undefined;
